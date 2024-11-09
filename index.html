@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .language-select {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 150px;
+        }
+
+        .editor {
+            display: flex;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f5f5f5;
+        }
+
+        .line-numbers {
+            padding: 10px;
+            border-right: 1px solid #ccc;
+            background: #f0f0f0;
+            text-align: right;
+            user-select: none;
+            color: #666;
+        }
+
+        #codeEditor {
+            flex-grow: 1;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            border: none;
+            resize: vertical;
+            min-height: 300px;
+            background: white;
+        }
+
+        .output-console {
+            background: black;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 100px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .compile-btn {
+            background: #ffd700;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .compile-btn:hover {
+            background: #ffcd00;
+        }
+
+        .compile-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>Write a program to find factorial of a number</h1>
+    
+    <div class="editor-container">
+        <div class="editor-header">
+            <label>Type Your Code</label>
+            <select id="languageSelect" class="language-select">
+                <option value="0">Python</option>
+                <option value="4">Javascript</option>
+                <option value="7">C</option>
+                <option value="77">CPP</option>
+                <option value="8">Java</option>
+            </select>
+        </div>
+
+        <div class="editor">
+            <div class="line-numbers">
+                <div id="lineNumbers"></div>
+            </div>
+            <textarea id="codeEditor" spellcheck="false">#Write your code</textarea>
+        </div>
+
+        <div>
+            <div>OUTPUT:</div>
+            <div id="outputConsole" class="output-console"></div>
+        </div>
+
+        <button id="compileBtn" class="compile-btn">Compile</button>
+    </div>
+
+    <script>
+        // Generate line numbers
+        function updateLineNumbers() {
+            const lines = codeEditor.value.split('\n').length;
+            const numbers = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+            lineNumbers.textContent = numbers;
+        }
+
+        // Initialize line numbers
+        const lineNumbers = document.getElementById('lineNumbers');
+        const codeEditor = document.getElementById('codeEditor');
+        updateLineNumbers();
+
+        // Update line numbers on input
+        codeEditor.addEventListener('input', updateLineNumbers);
+        codeEditor.addEventListener('scroll', () => {
+            lineNumbers.scrollTop = codeEditor.scrollTop;
+        });
+
+        // Compile code
+        const compileBtn = document.getElementById('compileBtn');
+        const outputConsole = document.getElementById('outputConsole');
+        const languageSelect = document.getElementById('languageSelect');
+
+        compileBtn.addEventListener('click', async () => {
+            const code = codeEditor.value;
+            const langId = languageSelect.value;
+            
+            if (!code.trim()) {
+                outputConsole.textContent = 'Error: Code is empty';
+                return;
+            }
+
+            compileBtn.disabled = true;
+            outputConsole.textContent = 'Compiling...';
+
+            try {
+                // Submit code
+                const response = await fetch('https://codequotient.com/api/executeCode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ code, langId })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    outputConsole.textContent = `Error: ${data.error}`;
+                    compileBtn.disabled = false;
+                    return;
+                }
+
+                // Poll for results
+                const codeId = data.codeId;
+                const intervalId = setInterval(async () => {
+                    try {
+                        const resultResponse = await fetch(`https://codequotient.com/api/codeResult/${codeId}`);
+                        const resultData = await resultResponse.json();
+
+                        if (resultData.data && Object.keys(resultData.data).length > 0) {
+                            clearInterval(intervalId);
+                            compileBtn.disabled = false;
+
+                            const { output, errors } = resultData.data;
+                            if (errors) {
+                                outputConsole.textContent = `Error:\n${errors}`;
+                            } else {
+                                outputConsole.textContent = output || 'No output';
+                            }
+                        }
+                    } catch (error) {
+                        clearInterval(intervalId);
+                        compileBtn.disabled = false;
+                        outputConsole.textContent = `Error fetching results: ${error.message}`;
+                    }
+                }, 1000);
+
+                // Clear interval after 30 seconds if no response
+                setTimeout(() => {
+                    clearInterval(intervalId);
+                    if (compileBtn.disabled) {
+                        compileBtn.disabled = false;
+                        outputConsole.textContent = 'Timeout: No response from server';
+                    }
+                }, 30000);
+
+            } catch (error) {
+                compileBtn.disabled = false;
+                outputConsole.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
